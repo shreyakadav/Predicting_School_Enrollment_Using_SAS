@@ -1,0 +1,331 @@
+
+
+
+
+
+/*
+	Data Science - I Final Project
+	Name: Shreya Sudhir Kadav
+	Rocket Number: R01577219
+	Instructor's Name: Dr. David Lilley & Dr. Bill Kalies
+	SAS Code 1 - School Data Cleaning
+*/
+
+/* Import the School file */
+proc import
+	datafile = "C:\Users\skadav\Downloads\ELSI_School_Enroll_2005_2017_Orig.xlsx"
+	out = School_Orig
+	dbms = xlsx replace;
+run;
+
+/* Sort the datase */
+proc sort data = School_Orig; by Total_Enroll_2017; run;
+
+/* Data Cleaning - Removing the "–", "†" and "‡" from the dataset */
+data School_Edited;
+set School_Orig;
+array vars{*} _character_;
+do i = 1 to dim(vars);
+	if index(vars(i), '–') > 0 then vars(i) = '';
+	if index(vars(i), '†') > 0 then vars(i) = '';
+	if index(vars(i), '‡') > 0 then vars(i) = '';
+	vars(i) = upcase(vars(i));
+	if index(vars(i), 'FLAG') > 0 then vars(i) = '';
+end;
+drop i;
+run;
+
+/* Transposing the file using macro */
+%macro transpose;
+    data School_Panel;
+	set School_Edited;
+	array Total_Enroll{13} Total_Enroll_2005-Total_Enroll_2017;
+	array White_Students{13} White_2005-White_2017;
+	array Black_Students{13} Black_2005-Black_2017;
+	array Hispanic_Students{13} Hispanic_2005-Hispanic_2017;
+	%do i = 1 %to 13;
+		Year = 2004 + &i;
+		TotalEnroll = Total_Enroll[&i];
+		White = White_Students[&i];
+		Black = Black_Students[&i];   
+		Hispanic = Hispanic_Students[&i];
+		output;
+	%end;
+	drop Total_Enroll_: White_: Black_: Hispanic_:;
+	run;
+%mend;
+
+%transpose;
+
+/* Importing the crosswalk file */
+proc import
+	datafile = "C:\Users\skadav\Downloads\All_School_Coordinates_2016_ELSI.xlsx"
+	out = School_Coordinates_Orig
+	dbms = xlsx replace;
+run;
+
+data School_Coordinates;
+set School_Coordinates_Orig;
+School_ID = School_ID_NCES + 0;
+stco_fips = County_Number + 0;
+drop School_ID_NCES FIPS_State year County_Number;
+run;
+
+/* Sorting both the files by School_ID before merging */
+proc sort data = School_Coordinates; by School_ID; run;
+
+proc sort data = School_Panel; by School_ID; run;
+
+/* Merging both the files using inner merge */
+data School_Merged;
+merge School_Coordinates (in = a) School_Panel (in = b);
+by School_ID;
+if a and b then output;
+run;
+
+/* Cleaning the merged file */
+data School_Data;
+set School_Merged;
+New_Total_Enroll = sum(White, Black, Hispanic);
+keep School_ID stco_fips year New_Total_Enroll;
+run;
+
+/* Sorting the merge file before aggregating */
+proc sort data = School_Data; by stco_fips year; run;
+
+/* Aggregating the merge file using proc means */
+proc means data = School_Data;
+output out = Aggreg_School;
+class stco_fips year;
+var New_Total_Enroll;
+run;
+
+/* Cleaning the aggregated file */
+data School_Clean;
+set Aggreg_School;
+where _TYPE_ = 3 AND _STAT_ = "MEAN";
+keep stco_fips year New_Total_Enroll;
+run;
+
+/* Saving the aggregated file */
+libname down "C:\Users\skadav\Downloads";
+run;
+
+data down.School_Clean;
+set School_Clean;
+run;
+
+
+
+
+
+************************************************************************************************************
+
+
+
+
+
+/*
+	Data Science - I Final Project
+	Name: Shreya Sudhir Kadav
+	Rocket Number: R01577219
+	Instructor's Name: Dr. David Lilley & Dr. Bill Kalies
+	SAS Code 2 - Crime Data Cleaning
+*/
+
+/* Loading the crime file into SAS */
+libname down "C:\Users\skadav\Downloads";
+run;
+
+data Crime_Orig;
+set down.crime_predictors_1990_2015;
+run;
+
+/* Keeping the required variables */
+data Crime_Data;
+set Crime_Orig;
+keep stco_fips year violent_crime_rate employ_county percap_income_county total_officers;
+run;
+
+/* Sorting the file before aggregating */
+proc sort data = Crime_Data; by stco_fips year; run;
+
+/* Aggregating the violent_crime_rate variable */
+proc means data = Crime_Data;
+output out = Aggreg_Crime_VCR;
+class stco_fips year;
+var violent_crime_rate;
+run;
+
+/* Cleaning the aggregated file for violent_crime_rate variable */
+data Crime_Clean_VCR;
+set Aggreg_Crime_VCR;
+where _TYPE_ = 3 AND _STAT_ = "MEAN";
+keep stco_fips year violent_crime_rate;
+run;
+
+/* Saving the aggregated file for violent_crime_rate variable */
+data down.Crime_Clean_VCR;
+set Crime_Clean_VCR;
+run;
+
+/* Aggregating the employ_county variable */
+proc means data = Crime_Data;
+output out = Aggreg_Crime_Employ;
+class stco_fips year;
+var employ_county;
+run;
+
+/* Cleaning the aggregated file for employ_county variable */
+data Crime_Clean_Employ;
+set Aggreg_Crime_Employ;
+where _TYPE_ = 3 AND _STAT_ = "MEAN";
+keep stco_fips year employ_county;
+run;
+
+/* Saving the aggregated file for employ_county variable */
+data down.Crime_Clean_Employ;
+set Crime_Clean_Employ;
+run;
+
+/* Aggregating the percap_income_county variable */
+proc means data = Crime_Data;
+output out = Aggreg_Crime_PCI;
+class stco_fips year;
+var percap_income_county;
+run;
+
+/* Cleaning the aggregated file for percap_income_county variable */
+data Crime_Clean_PCI;
+set Aggreg_Crime_PCI;
+where _TYPE_ = 3 AND _STAT_ = "MEAN";
+keep stco_fips year percap_income_county;
+run;
+
+/* Saving the aggregated file for percap_income_county variable */
+data down.Crime_Clean_PCI;
+set Crime_Clean_PCI;
+run;
+
+/* Aggregating the total_officers variable */
+proc means data = Crime_Data;
+output out = Aggreg_Crime_TO;
+class stco_fips year;
+var total_officers;
+run;
+
+/* Cleaning the aggregated file for total_officers variable */
+data Crime_Clean_TO;
+set Aggreg_Crime_TO;
+where _TYPE_ = 3 AND _STAT_ = "MEAN";
+keep stco_fips year total_officers;
+run;
+
+/* Saving the aggregated file for total_officers variable */
+data down.Crime_Clean_TO;
+set Crime_Clean_TO;
+run;
+
+
+
+
+
+*****************************************************************************************************************
+
+
+
+
+
+/*
+	Data Science - I Final Project
+	Name: Shreya Sudhir Kadav
+	Rocket Number: R01577219
+	Instructor's Name: Dr. David Lilley & Dr. Bill Kalies
+	SAS Code 3 - Merging and Regression
+*/
+
+/* Loading the datasets into SAS */
+libname down "C:\Users\skadav\Downloads";
+run;
+
+data School_Clean;
+length stco_fips 5 year 4;
+set down.School_Clean;
+run;
+
+data Crime_Clean_VCR;
+set down.Crime_Clean_VCR;
+run;
+
+data Crime_Clean_Employ;
+set down.Crime_Clean_Employ;
+run;
+
+data Crime_Clean_PCI;
+set down.Crime_Clean_PCI;
+run;
+
+data Crime_Clean_TO;
+set down.Crime_Clean_TO;
+run;
+
+/* Sorting the crime datasets before merging */
+proc sort data = Crime_Clean_VCR; by stco_fips year; run;
+
+proc sort data = Crime_Clean_Employ; by stco_fips year; run;
+
+proc sort data = Crime_Clean_PCI; by stco_fips year; run;
+
+proc sort data = Crime_Clean_TO; by stco_fips year; run;
+
+/* Merging the crime datasets */
+data Crime_Clean;
+merge Crime_Clean_VCR (in = a) Crime_Clean_Employ (in = b) Crime_Clean_PCI (in = c) Crime_Clean_TO (in = d);
+by stco_fips year;
+if a and b and c and d then output;
+run;
+
+data Crime_Clean;
+length stco_fips 5 year 4;
+set Crime_Clean;
+run;
+
+/* Sorting the school and merged crime dataset by stco_fips and year before final merge */
+proc sort data = Crime_Clean; by stco_fips year; run;
+
+proc sort data = School_Clean; by stco_fips year; run;
+
+/* Perform the final merge by using inner merge */
+data combo_crime_school;
+merge Crime_Clean (in = a) School_Clean (in = b);
+by stco_fips year;
+if a and b then output;
+run;
+
+/* Perform regressions */
+
+/* Regressing Total School Enrollment on Economic factors like employment and per capita income */
+proc reg data = combo_crime_school plots = none;
+model New_Total_Enroll = employ_county percap_income_county;
+run; quit;
+
+/* Regressing Total School Enrollment on law enforcement factor like total number of officers */
+proc reg data = combo_crime_school plots = none;
+model New_Total_Enroll = total_officers;
+run; quit;
+
+/* Regressing Total School Enrollment on crime factors like violent crime rate */
+proc reg data = combo_crime_school plots = none;
+model New_Total_Enroll = violent_crime_rate;
+run; quit;
+
+/* Regressing Total School Enrollment on law enforcement and crime factors like total number of officers and violent crime rate */
+proc reg data = combo_crime_school plots = none;
+model New_Total_Enroll = total_officers violent_crime_rate;
+run; quit;
+
+/* Overall Model */
+/* Regressing Total School Enrollment on Economic factors, law enforcement factors and crime factors*/
+proc reg data = combo_crime_school plots = none;
+model New_Total_Enroll = employ_county percap_income_county total_officers violent_crime_rate;
+run; quit;
